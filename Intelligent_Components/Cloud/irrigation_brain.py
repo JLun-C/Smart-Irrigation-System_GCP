@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import math
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
@@ -82,12 +83,17 @@ class IrrigationBrain:
         api_key = config.get("OPENWEATHER_API_KEY")
         lat = config.get("LAT")
         lon = config.get("LON")
+        city = config.get("CITY_NAME", "Unknown")
         try:
             url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
             response = requests.get(url, timeout=5)
             data = response.json()
-            return data['list'][0].get('pop', 0) * 100
-        except:
+            prob_rain = data['list'][0].get('pop', 0) * 100
+            forecast_time = data['list'][0].get('dt_txt', 'N/A')
+            print(f"🌦️  Weather Forecast for {city}: {prob_rain:.1f}% rain probability at {forecast_time}")
+            return prob_rain
+        except Exception as e:
+            print(f"⚠️  Forecast API Error: {e}, using 0% rain probability")
             return 0
 
     def on_connect(self, client, userdata, flags, rc):
@@ -102,20 +108,45 @@ class IrrigationBrain:
             # Extract Device ID from Topic "device/DEVICE_ID/telemetry"
             device_id = msg.topic.split('/')[1]
             
-            # 1. Log to DB (For History)
-            db_record = {
-                "temperature": payload.get("Temperature"),
-                "humidity": payload.get("Humidity"),
-                "soil_moisture": payload.get("Soil_moisture"),
-                "is_raining": payload.get("Raining", 0) == 1,
-                "pump_state": 0 # Logic will determine this
-            }
-            # Note: We insert asynchronously to avoid blocking MQTT loop too long? 
-            # Or just do it here. Supabase insert is fast enough for PoC.
-            supabase.table("sensor_data").insert(db_record).execute()
+            # Input Validation & Anomaly Detection
+            temp = self.validate_sensor(payload.get("Temperature"), 25.0, 0, 50)
+            humidity = self.validate_sensor(payload.get("Humidity"), 60.0, 0, 100)
+            soil_moisture = self.validate_sensor(payload.get("Soil_moisture"), 50.0, 0, 100)
+            is_raining = payload.get("Raining", 0) == 1
             
-            # 2. Run Logic
-            pump_cmd = self.process_logic(payload)
+            # 2. Run Fuzzy Logic FIRST to determine pump state
+            rain_prob = self.get_forecast_rain_prob()
+            pump_cmd = self.process_logic({
+                "Temperature": temp,
+                "Humidity": humidity,
+                "Soil_moisture": soil_moisture,
+                "Raining": 1 if is_raining else 0
+            }, rain_prob)
+            
+            # Log decision details
+            now_time = datetime.now(ZoneInfo("Asia/Kuala_Lumpur")).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"\n{'='*60}")
+            print(f"📊 IRRIGATION DECISION @ {now_time}")
+            print(f"{'='*60}")
+            print(f"📍 Location: {config.get('CITY_NAME', 'Unknown')} (Lat: {config.get('LAT')}, Lon: {config.get('LON')})")
+            print(f"🌡️  Temperature: {temp}°C")
+            print(f"💧 Humidity: {humidity}%")
+            print(f"🌱 Soil Moisture: {soil_moisture}%")
+            print(f"🌧️  Currently Raining: {'YES' if is_raining else 'NO'}")
+            print(f"🌦️  Rain Forecast: {rain_prob:.1f}%")
+            print(f"💦 PUMP DECISION: {'🟢 ON' if pump_cmd == 1 else '🔴 OFF'}")
+            print(f"{'='*60}\n")
+            
+            # 1. Log to DB with ACTUAL pump state (don't set timestamp, Supabase auto-generates)
+            db_record = {
+                "temperature": round(temp, 1),
+                "humidity": int(humidity),
+                "soil_moisture": int(soil_moisture),
+                "is_raining": is_raining,
+                "pump_state": pump_cmd  # 0=OFF, 1=ON
+            }
+            supabase.table("sensor_data").insert(db_record).execute()
+            print(f"Logged: T={temp}°C, H={humidity}%, SM={soil_moisture}%, Rain={is_raining}, Pump={pump_cmd}")
             
             # 3. Publish Command back to Device
             cmd_topic = f"{TOPIC_COMMAND_PREFIX}{device_id}/command"
@@ -125,20 +156,38 @@ class IrrigationBrain:
         except Exception as e:
             print(f"Error processing message: {e}")
 
-    def process_logic(self, data):
+    def validate_sensor(self, value, default, min_val, max_val):
+        """Validate sensor value and return default if invalid"""
+        try:
+            val = float(value)
+            if math.isnan(val) or val is None:
+                print(f"⚠️  Anomaly: NaN/None detected, using default {default}")
+                return default
+            if val < min_val or val > max_val:
+                print(f"⚠️  Anomaly: Value {val} out of range [{min_val}, {max_val}], using default {default}")
+                return default
+            return val
+        except (TypeError, ValueError):
+            print(f"⚠️  Anomaly: Invalid value '{value}', using default {default}")
+            return default
+
+    def process_logic(self, data, rain_prob):
         try:
             self.simulation.input['temperature'] = float(data.get('Temperature', 25))
             self.simulation.input['humidity'] = float(data.get('Humidity', 60))
             self.simulation.input['soil_moisture'] = float(data.get('Soil_moisture', 50))
             self.simulation.input['is_raining'] = int(data.get('Raining', 0))
-            self.simulation.input['rain_probability'] = self.get_forecast_rain_prob()
+            self.simulation.input['rain_probability'] = rain_prob
             
             self.simulation.compute()
             score = self.simulation.output['irrigation_volume']
             
+            print(f"🧮 Fuzzy Logic Score: {score:.2f}")
+            
             if score > 50: return 1 # ON
             return 0 # OFF
-        except:
+        except Exception as e:
+            print(f"❌ Fuzzy Logic Error: {e}, defaulting to OFF")
             return 0
 
     def run(self):

@@ -18,7 +18,7 @@ ESP32 Smart Watering System (Standard MQTT)
 // =====================================================
 const char* ssid = "cslab"; // Your WIFI SSID
 const char* password = "aksesg31"; // Your WIFI PW
-const char* mqtt_server = "136.119.30.115"; // Replace with GCP VM IP
+const char* mqtt_server = "34.59.186.75"; // Replace with GCP VM IP
 const int mqtt_port = 1883;
 const char* mqtt_user = ""; 
 const char* mqtt_pass = "";
@@ -49,7 +49,7 @@ PubSubClient client(espClient);
 // GLOBAL VARIABLES
 // =====================================================
 unsigned long lastMsg = 0;
-const unsigned long TELEMETRY_CYCLE = 2000; // Send every 2 seconds for Gateway
+const unsigned long TELEMETRY_CYCLE = 20000; // 20 seconds (DEV), change to 3600000 for 1 hour (PRODUCTION)
 bool pumpState = false;
 
 // Calibration for Soil Moisture
@@ -209,6 +209,14 @@ void loop() {
     soilPercent = constrain(soilPercent, 0, 100);
     
     bool raining = digitalRead(RAIN_PIN) == LOW; // Low = Rain
+
+    // Debug: Print all readings to Serial
+    Serial.println("----------------------------");
+    Serial.print("Temperature: "); Serial.print(t); Serial.println(" °C");
+    Serial.print("Humidity: "); Serial.print(h); Serial.println(" %");
+    Serial.print("Soil Moisture: "); Serial.print(soilPercent); Serial.println(" %");
+    Serial.print("Rain Status: "); Serial.println(raining ? "YES" : "NO");
+    Serial.print("Pump Status: "); Serial.println(pumpState ? "ON" : "OFF");
 
     // JSON Construction
     JSONVar payload;
