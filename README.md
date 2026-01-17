@@ -1,0 +1,4 @@
+## Description of the project:
+- #### The IoT-based Smart Algaculture System will combine sensors such as soil moisture, rain detection, DHT11 and a water pump for automated irrigation. The decision making to irrigate is based on a fuzzy logic model processing the sensor data with additional aid from the forecast data (rain probability), which is retrieved from OpenWeatherMap API, to implement a future insight to the system's capability in water conservation. By analysing the data, the system controls the irrigation volume, either to pump more, less or not pumping water, maximizing the usage of water for irrigation aligned with the plants' daily need. It also integrates a CNN model for leaf disease detection, creating a smart system that offers precise and efficient plant care. 
+
+- #### This project is for CPC357 (IoT Architecture and Smart Applications) only.

@@ -1,0 +1,6 @@
+.conda/
+*.h5
+*.hdf5
+Intelligent_Components/.env
+Intelligent_Components/Dataset/
+Intelligent_Components/snapshot.jpg

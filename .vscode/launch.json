@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "cppdbg",
+      "request": "launch",
+      "args": [],
+      "stopAtEntry": false,
+      "externalConsole": true,
+      "cwd": "d:/ComputerScience/Year4/CPC357 IoT/Project-20251218T040946Z-1-001/Project/IoT-Based-Smart-Algriculture-System-main/IoT-Based-Smart-Algriculture-System-main/Intelligent_Components",
+      "program": "d:/ComputerScience/Year4/CPC357 IoT/Project-20251218T040946Z-1-001/Project/IoT-Based-Smart-Algriculture-System-main/IoT-Based-Smart-Algriculture-System-main/Intelligent_Components/build/Debug/outDebug",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}
