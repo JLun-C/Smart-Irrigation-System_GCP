@@ -1,5 +1,6 @@
 import cv2
 import time
+import threading
 import os
 import base64
 import paho.mqtt.client as mqtt
@@ -22,10 +23,11 @@ supabase: Client = create_client(url, key)
 MQTT_BROKER = config.get("MQTT_EDGE_BROKER", "34.59.186.75")
 MQTT_PORT = int(config.get("MQTT_PORT", "1883"))
 TOPIC_CAPTURE_CMD = "device/camera/command"
+TOPIC_RESULT = "device/camera/result"
 
 class VisionGateway:
     def __init__(self):
-        print(f"Initializing Vision Gateway (Phase: {PHASE}, Interval: {AUTO_INTERVAL}s)...")
+        print(f"Initializing Vision Gateway (Interval: {AUTO_INTERVAL}s)...")
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
@@ -34,13 +36,17 @@ class VisionGateway:
     def on_connect(self, client, userdata, flags, rc):
         print(f"Connected to MQTT Broker (RC: {rc})")
         client.subscribe(TOPIC_CAPTURE_CMD)
-        print(f"Subscribed to {TOPIC_CAPTURE_CMD}")
+        client.subscribe(TOPIC_RESULT)
+        print(f"Subscribed to {TOPIC_CAPTURE_CMD} and {TOPIC_RESULT}")
 
     def on_message(self, client, userdata, msg):
         try:
             payload = msg.payload.decode()
-            if "CAPTURE" in payload.upper():
-                self.capture_and_upload()
+            if msg.topic == TOPIC_CAPTURE_CMD:
+                if "CAPTURE" in payload.upper():
+                    self.capture_and_upload()
+            elif msg.topic == TOPIC_RESULT:
+                print(f"\n>>> [DIAGNOSIS RESULT] {payload} <<<\n")
         except Exception as e:
             print(f"Error handling message: {e}")
 
