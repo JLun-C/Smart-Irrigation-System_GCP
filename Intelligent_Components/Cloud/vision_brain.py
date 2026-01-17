@@ -9,6 +9,9 @@ from supabase import create_client, Client
 from keras.models import load_model
 from tensorflow.keras.utils import img_to_array
 import tempfile
+import base64
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppresses info/warning logs
 
 # Load environment variables
 env_path = os.path.join(os.path.dirname(__file__), '../.env')
@@ -28,24 +31,37 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), '../leaf_disease_detection_
 model = load_model(MODEL_PATH)
 CLASSES = ['Healthy', 'Powdery', 'Rust']
 
-def decode_image(hex_string):
-    # Decode PG hex string to bytes
-    # The format might be "\x..." or simply hex. 
-    # psycopg2.Binary often stores as hex string in text output, but Supabase API might return it differently.
-    # We assume standard base64/hex handling here or file text path.
-    # For this PoC, we assume the 'images' column contains the HEX string of the binary.
+import base64
+
+def decode_image(img_data):
     try:
-        if hex_string.startswith('\\x'):
-            hex_string = hex_string[2:]
-        return bytes.fromhex(hex_string)
-    except:
+        # Case 1: Already bytes
+        if isinstance(img_data, bytes):
+            return img_data
+        
+        # Case 2: Hex string from Postgres (\x...)
+        if isinstance(img_data, str) and img_data.startswith('\\x'):
+            return bytes.fromhex(img_data[2:])
+        
+        # Case 3: Base64 string (Common in web/IoT uploads)
+        if isinstance(img_data, str):
+            try:
+                return base64.b64decode(img_data)
+            except:
+                # If not base64, try raw hex
+                return bytes.fromhex(img_data)
+        
+        return None
+    except Exception as e:
+        print(f"Decoding error: {e}")
         return None
 
 # Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)
 POLL_INTERVAL = 20 
 
 def process_images():
-    print(f"Cloud Vision Service Started (Interval: {POLL_INTERVAL}s)...")
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Cloud Vision Service v2 (Auto-Automation) Started.")
+    print(f"Interval: {POLL_INTERVAL}s, Broker: {MQTT_BROKER}")
     
     # Setup MQTT Client
     mqtt_client = mqtt.Client()
@@ -57,7 +73,7 @@ def process_images():
 
     while True:
         try:
-            # Find images with no result or 'Pending'
+            # Find oldest image with no result
             response = supabase.table("images").select("*").is_("result", "null").order("created_at", desc=False).limit(1).execute()
             
             if response.data:
@@ -69,44 +85,43 @@ def process_images():
                 img_bytes = decode_image(img_hex)
                 
                 if img_bytes:
-                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
-                        tf.write(img_bytes)
-                        tf_path = tf.name
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                     
-                    img = cv2.imread(tf_path)
-                    
+                    # CRITICAL: Verify img is NOT None before accessing attributes like .shape
                     if img is not None:
-                        img = cv2.resize(img, (224, 224))
-                        img_array = img_to_array(img)
-                        img_array = np.expand_dims(img_array, axis=0) / 255.0
-                        
-                        predictions = model.predict(img_array)
-                        class_idx = np.argmax(predictions[0])
-                        confidence = float(np.max(predictions[0]) * 100)
-                        result = CLASSES[class_idx] if class_idx < len(CLASSES) else "Unknown"
-                        
-                        summary = f"{result} ({confidence:.2f}%)"
-                        print(f"Prediction Result: {summary}")
-                        
-                        # Update DB
-                        supabase.table("images").update({"result": result}).eq("id", image_id).execute()
-                        
-                        # Publish Result to Edge
-                        mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: {summary}")
+                        h, w = img.shape[:2]
+                        if h > 0 and w > 0:
+                            img = cv2.resize(img, (224, 224))
+                            img_array = img_to_array(img)
+                            img_array = np.expand_dims(img_array, axis=0) / 255.0
+                            
+                            predictions = model.predict(img_array)
+                            class_idx = np.argmax(predictions[0])
+                            confidence = float(np.max(predictions[0]) * 100)
+                            result = CLASSES[class_idx] if class_idx < len(CLASSES) else "Unknown"
+                            
+                            summary = f"{result} ({confidence:.2f}%)"
+                            print(f"Prediction Result: {summary}")
+                            
+                            # Update DB
+                            supabase.table("images").update({"result": result}).eq("id", image_id).execute()
+                            
+                            # Publish Result to Edge
+                            mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: {summary}")
+                        else:
+                            print(f"Error: Image ID {image_id} has zero dimensions ({w}x{h}).")
+                            supabase.table("images").update({"result": "Error: Empty Dimensions"}).eq("id", image_id).execute()
+                            mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (Zero Dim)")
                     else:
-                        print(f"Error: Image ID {image_id} could not be read by OpenCV.")
-                        supabase.table("images").update({"result": "Error: Invalid Image"}).eq("id", image_id).execute()
-                        mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (Invalid Image)")
-
-                    # Cleanup
-                    if os.path.exists(tf_path):
-                        os.remove(tf_path)
+                        print(f"Error: OpenCV imdecode returned None for ID {image_id}")
+                        supabase.table("images").update({"result": "Error: Decode Fail"}).eq("id", image_id).execute()
+                        mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (OpenCV Decode)")
                 else:
-                    print(f"Failed to decode image {image_id}.")
-                    supabase.table("images").update({"result": "Error: Decode Fail"}).eq("id", image_id).execute()
-                    mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (Decode Fail)")
+                    print(f"Failed to extract binary data for image {image_id}.")
+                    supabase.table("images").update({"result": "Error: Extraction Fail"}).eq("id", image_id).execute()
+                    mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (Binary Fail)")
             
-            # Use configurable interval
             time.sleep(POLL_INTERVAL)
                 
         except Exception as e:
