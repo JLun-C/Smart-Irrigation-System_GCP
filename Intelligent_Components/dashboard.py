@@ -112,6 +112,46 @@ if not df.empty:
         fig_soil = px.area(df, x='timestamp', y='soil_moisture', title='Soil Moisture Trends', color_discrete_sequence=['#2ecc71'])
         st.plotly_chart(fig_soil, use_container_width=True)
 
+# --- WEATHER FORECAST ROW ---
+st.subheader("🌦️ Weather Forecast (Rain Probability)")
+
+def fetch_weather_forecast():
+    if not supabase: return None
+    try:
+        response = supabase.table("weather_data").select("*").order("created_at", desc=True).limit(1).execute()
+        if response.data:
+            return response.data[0]
+    except Exception as e:
+        st.error(f"Error fetching weather data: {e}")
+    return None
+
+weather_data = fetch_weather_forecast()
+
+if weather_data:
+    prob = weather_data.get("rain_probability", 0)
+    # Parse forecast time, handle ISO format errors if any
+    f_time_str = weather_data.get("forecast_time", "")
+    try:
+        f_time = datetime.fromisoformat(f_time_str).strftime('%H:%M')
+    except:
+        f_time = f_time_str
+
+    # Create a gauge chart for rain probability
+    fig_gauge = px.bar(
+        x=[prob], 
+        y=["Rain Prob"], 
+        orientation='h', 
+        range_x=[0, 100], 
+        text=[f"{prob}%"],
+        color=[prob],
+        color_continuous_scale=['#87CEEB', '#1E90FF', '#00008B']
+    )
+    fig_gauge.update_layout(title=f"Next Rain Probability (at {f_time})", xaxis_title="Probability (%)", yaxis_title="", showlegend=False, height=200)
+    st.plotly_chart(fig_gauge, use_container_width=True)
+else:
+    st.info("No weather forecast data available.")
+
+
 # --- IMAGES ROW ---
 st.subheader("🍃 Leaf Disease Detection")
 

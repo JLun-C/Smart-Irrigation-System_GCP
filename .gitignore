@@ -1,4 +1,5 @@
 .conda/
+venv/
 *.h5
 *.hdf5
 Intelligent_Components/.env

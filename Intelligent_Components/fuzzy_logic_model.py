@@ -11,6 +11,10 @@ import serial
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from supabase import create_client, Client
+import argparse
+import random
+import time
+
 
 class WeatherDecisionTester:
     def __init__(self):
@@ -202,6 +206,10 @@ class WeatherDecisionTester:
         return pump_state
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Smart Irrigation Fuzzy Logic Controller')
+    parser.add_argument('--simulate', action='store_true', help='Run in simulation mode without serial connection')
+    args = parser.parse_args()
+
     print("Script started...", flush=True)
 
     SERIAL_PORT = "COM4"
@@ -209,36 +217,63 @@ if __name__ == "__main__":
 
     tester = WeatherDecisionTester()
 
-    try: 
-        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-        print(f"Connected to ESP32 on {SERIAL_PORT}", flush=True)
-    except Exception as e:
-        print(f"Serial Connection Error: {e}", flush=True)
-        sys.exit(1)
-
-    print("Listening for sensor data from ESP32...", flush=True)
+    ser = None
+    if not args.simulate:
+        try: 
+            ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+            print(f"Connected to ESP32 on {SERIAL_PORT}", flush=True)
+        except Exception as e:
+            print(f"Serial Connection Error: {e}", flush=True)
+            print("Tip: Use --simulate to run without hardware.")
+            sys.exit(1)
+        print("Listening for sensor data from ESP32...", flush=True)
+    else:
+        print("🚀 SIMULATION MODE ACTIVE: Generating mock sensor data...", flush=True)
 
     while True:
         try:
-
-            if ser is None or not ser.is_open:
-                print(f"Connecting to ESP32 on {SERIAL_PORT}...", end=" ", flush=True)
-                ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=2)
-                print("CONNECTED.")
-                time.sleep(2)
+            arduino_data = None
             
-            while ser.is_open:
-                line = ser.readline().decode('utf-8').strip()
+            if args.simulate:
+                # Simulate delay between readings
+                time.sleep(5)
+                
+                # Generate random mock data
+                arduino_data = {
+                    "Temperature": round(random.uniform(25.0, 35.0), 2),
+                    "Humidity": round(random.uniform(60.0, 90.0), 2),
+                    "Soil_moisture": int(random.uniform(30, 80)),
+                    "Raining": random.choice([0, 1]),
+                    "Pump": "OFF" # Initial state, will be overwritten by decision
+                }
+                print(f"Set Simulated Input: {arduino_data}", flush=True)
+                
+            else:
+                # Real Hardware Logic
+                if ser is None or not ser.is_open:
+                    print(f"Connecting to ESP32 on {SERIAL_PORT}...", end=" ", flush=True)
+                    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=2)
+                    print("CONNECTED.")
+                    time.sleep(2)
+                
+                if ser.is_open:
+                    line = ser.readline().decode('utf-8').strip()
+                    if line.startswith('{') and line.endswith('}'):
+                        arduino_data = json.loads(line)
+                    else:
+                        continue
+            
+            # Common Decision Logic
+            if arduino_data:
+                state = tester.compute_decision(arduino_data)
 
-                if line.startswith('{') and line.endswith('}'):
-                    arduino_data = json.loads(line)
-                    state = tester.compute_decision(arduino_data)
-
+                # Handle Actuation
+                if args.simulate:
+                    print(f"🔄 SIMULATED ACTUATION: Pump Set to Mode {state}")
+                else:
                     # Send decision back to ESP32
                     ser.write(f"{state}\n".encode('utf-8'))
                     print(f"Sent to ESP32: {state}", flush=True)
-                else:
-                    continue
 
         except json.JSONDecodeError:
             print("JSON Decode Error: Invalid JSON format", flush=True)
@@ -260,7 +295,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error: {e}", flush=True)
             time.sleep(5)
-        finally: 
-            if 'ser' in locals() and ser.is_open:
-                ser.close()
-                print("Serial connection closed safely.")
+        # finally: 
+        #     if 'ser' in locals() and ser.is_open:
+        #         ser.close()
+        #         print("Serial connection closed safely.")
