@@ -1,24 +1,30 @@
 /*
 ========================================
-ESP32 Smart Watering System
+ESP32 Smart Watering System (Standard MQTT)
 ========================================
-- Reads environmental sensors
-- Sends telemetry to V-ONE Cloud via MQTT
-- Controls water pump using fuzzy logic
-- Supports AUTO, MANUAL, and EMERGENCY modes
+- Reads environmental sensors (DHT11, Soil, Rain)
+- Sends telemetry via MQTT (PubSubClient) AND Serial (JSON)
+- Controls water pump via MQTT Commands or Serial Input
 ========================================
 */
 
-#include "VOneMqttClient.h"   // V-ONE Cloud MQTT client
-#include "DHT.h"              // DHT11 temperature & humidity sensor library
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <Arduino_JSON.h>
+#include "DHT.h"
 
 // =====================================================
-// DEVICE IDs (Registered in V-ONE Cloud)
+// WIFI & MQTT SETTINGS
 // =====================================================
-const char* DHT11Sensor      = "993a0fea-2be0-4427-9f60-3363c68b2f07";
-const char* RainSensor       = "7065fa0a-0958-4610-8e82-f3bd1530ae72";
-const char* MoistureSensor   = "1a08cd4e-e79f-4bd3-911b-c28798e09112";
-const char* RelayWaterPump   = "8ae703d6-c543-4e83-9cdc-9a0c5f3ceb98";
+const char* ssid = "cslab"; // Your WIFI SSID
+const char* password = "aksesg31"; // Your WIFI PW
+const char* mqtt_server = "136.119.30.115"; // Replace with GCP VM IP
+const int mqtt_port = 1883;
+const char* mqtt_user = ""; 
+const char* mqtt_pass = "";
+
+const char* topic_telemetry = "device/ESP32_001/telemetry";
+const char* topic_command   = "device/ESP32_001/command";
 
 // =====================================================
 // PIN CONFIGURATION
@@ -36,292 +42,190 @@ const int LED_Pin_G     = 19;
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-// V-ONE MQTT client object
-VOneMqttClient voneClient;
-
-// =====================================================
-// SOIL MOISTURE CALIBRATION
-// =====================================================
-int MinDepth = 4095;   // Fully dry
-int MaxDepth = 2170;   // Fully wet
-
-// =====================================================
-// MANUAL OVERRIDE SETTINGS
-// =====================================================
-const unsigned long MANUAL_TIMEOUT = 30000; // 30 seconds
-unsigned long manualStartTime = 0;
-
-// =====================================================
-// SYSTEM CONTROL MODES
-// =====================================================
-enum ControlMode {
-  AUTO_MODE,
-  MANUAL_MODE,
-  EMERGENCY_STOP
-};
-ControlMode mode = AUTO_MODE;
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 // =====================================================
 // GLOBAL VARIABLES
 // =====================================================
 unsigned long lastMsg = 0;
+const unsigned long TELEMETRY_CYCLE = 2000; // Send every 2 seconds for Gateway
 bool pumpState = false;
-bool lastPumpState = false;
+
+// Calibration for Soil Moisture
+int MinDepth = 4095;   // Fully dry
+int MaxDepth = 2170;   // Fully wet
 
 // =====================================================
-// FUZZY LOGIC CONTROL VARIABLES
-// =====================================================
-int fuzzyState = 0;                // 0 = OFF, 1 = Short pulse, 2 = Long pulse
-bool pulseRunning = false;
-unsigned long pulseEndTime = 0;
-unsigned long cycleStart = 0;
-
-const unsigned long TELEMETRY_CYCLE = 60000; // 60 seconds
-const unsigned long FUZZY1_PULSE    = 20000; // 20 seconds
-const unsigned long FUZZY2_PULSE    = 40000; // 40 seconds
-
-bool manualLock = false; // Prevent AUTO override during manual/emergency
-
-// =====================================================
-// WIFI SETUP FUNCTION
+// SETUP WIFI
 // =====================================================
 void setup_wifi() {
   delay(10);
   Serial.println();
   Serial.print("Connecting to ");
-  Serial.println(WIFI_SSID);
+  Serial.println(ssid);
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(ssid, password);
 
-  // Wait until WiFi is connected
-  while (WiFi.status() != WL_CONNECTED) {
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
     delay(500);
     Serial.print(".");
+    retries++;
   }
 
-  Serial.println("\nWiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-}
-
-// =====================================================
-// NTP TIME SYNCHRONIZATION
-// =====================================================
-void syncTime() {
-  configTime(8 * 3600, 0, "pool.ntp.org", "time.google.com");
-  Serial.print("Waiting for NTP time sync");
-
-  time_t now = time(nullptr);
-  while (now < 100000) {
-    delay(500);
-    Serial.print(".");
-    now = time(nullptr);
-  }
-
-  Serial.println("\nTime synchronized");
-}
-
-// =====================================================
-// V-ONE ACTUATOR CALLBACK
-// Handles MANUAL and EMERGENCY commands
-// =====================================================
-void onActuatorReceived(const char* deviceId, const char* payload) {
-  if (strcmp(deviceId, RelayWaterPump) != 0) return;
-
-  JSONVar cmd = JSON.parse(payload);
-  if (JSON.typeof(cmd) == "undefined") return;
-
-  bool userCmd = (bool)cmd["Relay"];
-
-  if (userCmd) {
-    // Manual ON
-    mode = MANUAL_MODE;
-    pumpState = true;
-    manualStartTime = millis() + MANUAL_TIMEOUT;
-    manualLock = true;
-    Serial.println("👆 MANUAL MODE: Pump Forced ON");
+  if(WiFi.status() == WL_CONNECTED){
+    Serial.println("\nWiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
   } else {
-    // Emergency OFF
-    mode = EMERGENCY_STOP;
-    pumpState = false;
-    pulseRunning = false;
-    manualLock = true;
-    Serial.println("🚨 EMERGENCY STOP ACTIVATED");
+    Serial.println("\nWiFi Failed (Continuing in Offline Mode for Serial Gateway)");
   }
 }
 
 // =====================================================
-// APPLY PUMP & LED OUTPUT
+// MQTT CALLBACK
 // =====================================================
+void callback(char* topic, byte* payload, unsigned int length) {
+  String message = "";
+  for (unsigned int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  Serial.println(message);
+
+  // Parse Command (Expect "1" for ON, "0" for OFF)
+  if (String(topic) == topic_command) {
+    if(message.toInt() == 1){
+      pumpState = true;
+      Serial.println("☁️ Cloud Command: PUMP ON");
+    } else {
+      pumpState = false;
+      Serial.println("☁️ Cloud Command: PUMP OFF");
+    }
+    applyPump();
+  }
+}
+
+void reconnect() {
+  // Loop until we're reconnected (Block only short time)
+  if (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Create a random client ID
+    String clientId = "ESP32Client-";
+    clientId += String(random(0xffff), HEX);
+    
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
+      Serial.println("connected");
+      client.subscribe(topic_command);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again later");
+    }
+  }
+}
+
 void applyPump() {
   digitalWrite(RELAY_PIN, pumpState ? HIGH : LOW);
   digitalWrite(LED_Pin_G, pumpState ? HIGH : LOW);
   digitalWrite(LED_Pin_R, pumpState ? LOW : HIGH);
-
-  // Publish pump status only when it changes
-  if (pumpState != lastPumpState) {
-    voneClient.publishTelemetryData(RelayWaterPump, "Status", pumpState);
-    lastPumpState = pumpState;
-  }
 }
 
 // =====================================================
-// SETUP FUNCTION (Runs once)
+// SETUP
 // =====================================================
 void setup() {
   Serial.begin(115200);
-
-  setup_wifi();     // Connect to WiFi
-  syncTime();       // Sync NTP time
-
-  voneClient.setup();
-  voneClient.registerActuatorCallback(onActuatorReceived);
-
-  // Initialize sensors and IO
-  dht.begin();
+  
+  // Init Pins
   pinMode(MOISTURE_PIN, INPUT);
   pinMode(RAIN_PIN, INPUT);
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED_Pin_R, OUTPUT);
   pinMode(LED_Pin_G, OUTPUT);
 
-  // Default OFF state
+  dht.begin();
+  
+  // Default OFF
   digitalWrite(RELAY_PIN, LOW);
-  digitalWrite(LED_Pin_R, LOW);
-  digitalWrite(LED_Pin_G, LOW);
 
-  applyPump();
-
-  Serial.println("---------- Smart Watering System ----------");
-  delay(2000);
+  // Setup Network
+  setup_wifi();
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
 }
 
 // =====================================================
-// LOOP FUNCTION (Runs continuously)
+// LOOP
 // =====================================================
 void loop() {
-  unsigned long now = millis();
-  static bool statusPublished = false;
-
-  // Maintain MQTT connection
-  if (!voneClient.connected()) {
-    voneClient.reconnect();
-    statusPublished = false;
+  // 1. MQTT Handling (Non-blocking attempt)
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!client.connected()) {
+      // Only try to reconnect occasionally, don't block loop
+      static unsigned long lastReconnect = 0;
+      if(millis() - lastReconnect > 5000){
+        lastReconnect = millis();
+        reconnect();
+      }
+    } else {
+      client.loop();
+    }
   }
 
-  // Publish device status once connected
-  if (voneClient.connected() && !statusPublished) {
-    voneClient.publishDeviceStatusEvent(DHT11Sensor, true);
-    voneClient.publishDeviceStatusEvent(RainSensor, true);
-    voneClient.publishDeviceStatusEvent(MoistureSensor, true);
-    voneClient.publishDeviceStatusEvent(RelayWaterPump, true);
-    statusPublished = true;
-  }
-
-  voneClient.loop();
-
-  // =================================================
-  // RECEIVE FUZZY STATE FROM SERIAL (Optional input)
-  // =================================================
+  // 2. Serial Input (From Laptop Gateway)
   if (Serial.available() > 0) {
     String incoming = Serial.readStringUntil('\n');
     incoming.trim();
     if (incoming.length() > 0) {
-      fuzzyState = incoming.toInt();
-    }
-  }
-
-  // =================================================
-  // CONTROL LOGIC
-  // =================================================
-  if (mode == EMERGENCY_STOP) {
-    pumpState = false;
-    pulseRunning = false;
-    manualLock = true;
-  }
-  else if (mode == MANUAL_MODE) {
-    pumpState = true;
-    manualLock = true;
-
-    if (now > manualStartTime) {
-      mode = AUTO_MODE;
-      manualLock = false;
-      Serial.println("⏰ Manual Timeout Expired: Returning to AUTO MODE");
-    }
-  }
-  else if (mode == AUTO_MODE && !manualLock) {
-
-    // Start new irrigation cycle
-    if (now - cycleStart >= TELEMETRY_CYCLE) {
-      cycleStart = now;
-      pulseRunning = false;
-
-      if (fuzzyState == 1) {
-        pulseEndTime = now + FUZZY1_PULSE;
-        pulseRunning = true;
-        Serial.println("🟡 FUZZY 1: Pulse started");
-      }
-      else if (fuzzyState == 2) {
-        pulseEndTime = now + FUZZY2_PULSE;
-        pulseRunning = true;
-        Serial.println("🟢 FUZZY 2: Pulse started");
-      }
-    }
-
-    // Apply pulse timing
-    if (pulseRunning) {
-      if (now < pulseEndTime) {
-        pumpState = true;
+      int val = incoming.toInt();
+      if(val == 2 || val == 1) { // High or Low
+         pumpState = true;
+         Serial.println("💻 Gateway Command: PUMP ON");
       } else {
-        pumpState = false;
-        pulseRunning = false;
-        Serial.println("⏹ Pulse ended");
+         pumpState = false;
+         Serial.println("� Gateway Command: PUMP OFF");
       }
-    } else {
-      pumpState = false;
+      applyPump();
     }
   }
 
-  // Apply pump and LED state
-  applyPump();
-
-  // =================================================
-  // TELEMETRY PUBLISHING
-  // =================================================
+  // 3. Telemetry Cycle
+  unsigned long now = millis();
   if (now - lastMsg > TELEMETRY_CYCLE) {
     lastMsg = now;
 
-    float temperature = dht.readTemperature();
-    float humidity    = dht.readHumidity();
-
-    JSONVar payloadObject;
-    payloadObject["Humidity"]    = humidity;
-    payloadObject["Temperature"] = temperature;
-    voneClient.publishTelemetryData(DHT11Sensor, payloadObject);
-
-    float sensorValue = analogRead(MOISTURE_PIN);
-    int soilPercent = map(sensorValue, MinDepth, MaxDepth, 0, 100);
+    // Read Sensors
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+    if (isnan(t) || isnan(h)) { t = 0; h = 0;}
+    
+    int rawMoisture = analogRead(MOISTURE_PIN);
+    int soilPercent = map(rawMoisture, MinDepth, MaxDepth, 0, 100);
     soilPercent = constrain(soilPercent, 0, 100);
-    voneClient.publishTelemetryData(MoistureSensor, "Soil moisture", soilPercent);
+    
+    bool raining = digitalRead(RAIN_PIN) == LOW; // Low = Rain
 
-    bool raining = digitalRead(RAIN_PIN) == LOW;
-    voneClient.publishTelemetryData(RainSensor, "Raining", raining ? 1 : 0);
+    // JSON Construction
+    JSONVar payload;
+    payload["Temperature"]   = t;
+    payload["Humidity"]      = h;
+    payload["Soil_moisture"] = soilPercent;
+    payload["Raining"]       = raining ? 1 : 0;
+    payload["Pump"]          = pumpState ? "ON" : "OFF"; // String for Gateway compatibility
 
-    // Serial debug output
-    Serial.println("----------------------------");
-    Serial.print("Temperature: "); Serial.println(temperature);
-    Serial.print("Humidity: "); Serial.println(humidity);
-    Serial.print("Soil Moisture: "); Serial.print(soilPercent); Serial.println("%");
-    Serial.print("Rain Status: "); Serial.println(raining ? "YES" : "NO");
-    Serial.print("Pump Status: "); Serial.println(pumpState ? "ON" : "OFF");
+    String jsonString = JSON.stringify(payload);
+    
+    // A. Send to Serial (For Laptop Gateway)
+    Serial.println(jsonString);
 
-    JSONVar serialPayload;
-    serialPayload["Temperature"]   = temperature;
-    serialPayload["Humidity"]      = humidity;
-    serialPayload["Soil_moisture"] = soilPercent;
-    serialPayload["Raining"]       = raining ? 1 : 0;
-    serialPayload["Pump"]          = pumpState ? "ON" : "OFF";
-    Serial.println(JSON.stringify(serialPayload));
+    // B. Send to MQTT (Direct Cloud)
+    if(client.connected()){
+      client.publish(topic_telemetry, jsonString.c_str());
+    }
   }
 }

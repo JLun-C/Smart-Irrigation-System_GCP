@@ -1,8 +1,3 @@
-## Description of the project:
-- #### The IoT-based Smart Algaculture System will combine sensors such as soil moisture, rain detection, DHT11 and a water pump for automated irrigation. The decision making to irrigate is based on a fuzzy logic model processing the sensor data with additional aid from the forecast data (rain probability), which is retrieved from OpenWeatherMap API, to implement a future insight to the system's capability in water conservation. By analysing the data, the system controls the irrigation volume, either to pump more, less or not pumping water, maximizing the usage of water for irrigation aligned with the plants' daily need. It also integrates a CNN model for leaf disease detection, creating a smart system that offers precise and efficient plant care. 
-
-- #### This project is for CPC357 (IoT Architecture and Smart Applications) only.
-
 # Deployment Guide: Smart Irrigation System on GCP Ubuntu VM
 
 This guide covers how to set up your Google Cloud Platform (GCP) Compute Engine instance (Ubuntu) and deploy the Smart Irrigation System.
@@ -79,14 +74,14 @@ nano Intelligent_Components/.env
 ```
 Paste your configuration (replace with your actual values):
 ```env
-OPENWEATHER_API_KEY=[YOUR_OPENWEATHERMAP_API_KEY]
-CITY_NAME=[YOUR_CITY_NAME]
-LAT=[YOUR_PLANT_CURRENT_LATITUDE]
-LON=[YOUR_PLANT_CURRENT_LONGITUDE]
+OPENWEATHER_API_KEY=f3726ac...
+CITY_NAME=George Town
+LAT=5.3544
+LON=100.3018
 
-SUPABASE_URL=[YOUR_SUPABASE_URL]
-SUPABASE_KEY=[YOUR_SUPABASE_ANON_KEY]
-SUPABASE_SERVICE_KEY=[YOUR_SUPABASE_SERVICE_ROLE_KEY]
+SUPABASE_URL=https://...
+SUPABASE_KEY=eyJ... (Your ANON key)
+SUPABASE_SERVICE_KEY=eyJ... (Your SERVICE_ROLE key)
 
 # MQTT Broker (use 'localhost' on VM, VM external IP on laptop)
 MQTT_BROKER=localhost
@@ -134,4 +129,6 @@ python Intelligent_Components/Edge/vision_gateway.py
 ```
 
 ### D. The ESP32 (Irrigation Edge)
-Just power it on! It will send telemetry to your **private VM broker**, and listen for pump commands from the Cloud Brain.
+Just power it on! It will connect to WiFi `cslab`, send telemetry to your **private VM broker**, and listen for pump commands from the Cloud Brain.
+
+*(Note: The `irrigation_gateway.py` script is no longer needed)*

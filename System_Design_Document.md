@@ -6,19 +6,20 @@ The Smart Irrigation System is an IoT application designed to optimize water usa
 ### High-Level Architecture
 ```mermaid
 graph LR
-    subgraph Device Layer
-        Note[Simulated/Physical ESP32] --> Logic[Intelligent Component (Fuzzy Logic)]
-        Sensors[Sensors: Temp, Hum, Soil] -.-> Note
+    subgraph "Edge / Local Network"
+        Note[Device: ESP32 / Simulator] --> Gateway[Gateway: Laptop/Pi]
+        Sensors[Sensors] -.-> Note
+        Cam[Webcam] -.-> Gateway
+        Gateway --"Runs Logic"--> Logic[Fuzzy Logic Module]
+        Gateway --"Runs ML"--> ML[Leaf Disease Model]
     end
     
-    subgraph "Data & Logic Layer"
-        Logic --"Push Data"--> DB[(Supabase Database)]
+    subgraph "Cloud Layer (GCP/Internet)"
+        Logic --"Secure Push (Service Key)"--> DB[(Supabase Database)]
+        ML --"Secure Push (Service Key)"--> DB
         OpenWeather[OpenWeatherMap API] --"Forecast Data"--> Logic
-    end
-    
-    subgraph Application Layer
         DB --> Dashboard[Streamlit Dashboard]
-        User((User)) --"View"--> Dashboard
+        User((User)) --"View HTTPS"--> Dashboard
     end
 ```
 
@@ -91,8 +92,9 @@ graph LR
 
 ## 4. Security Considerations for Proof Of Concept
 
--   **Environment Variables**: All sensitive keys (API Keys, Database Credentials) are stored in a `.env` file and **never committed** to version control (via `.gitignore`).
--   **Database Access**:
-    -   The Supabase client uses a public API Key (Safe for client-side if RLS is on, but here used server-side).
-    -   *Future Improvement*: Implement Row Level Security (RLS) policies to restrict write access only to authenticated devices.
+-   **Environment Variables**: All sensitive keys (API Keys, Database Credentials) are stored in a `.env` file and **never committed** to version control. A `.env.example` template is provided for deployment.
+-   **Access Control (Role-Based)**:
+    -   **Frontend (Dashboard)**: Uses the **Anon Public Key**. It has read-only access enforced by Row Level Security (RLS) policies.
+    -   **Backend (Edge Gateway)**: Uses the **Service Role (Admin) Key**. This privileged key allows the edge scripts to bypass RLS for data ingestion, ensuring that only trusted physical devices can write to the database.
+-   **Network Security**: The connection between Edge and Cloud is encrypted via HTTPS. The Dashboard is served over HTTPS when deployed on GCP.
 -   **Input Validation**: The simulator checks for valid JSON ranges to prevent injection of malformed data.

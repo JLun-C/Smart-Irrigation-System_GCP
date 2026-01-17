@@ -1,8 +1,22 @@
-.conda/
+# Environments
+# .env
+.venv
 venv/
-*.h5
-*.hdf5
-Intelligent_Components/.env
-Intelligent_Components/Dataset/
+env/
+__pycache__/
+
+# Python
+*.py[cod]
+*$py.class
 Intelligent_Components/snapshot.jpg
+
+# System Design Document
 System_Design_Document.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+# .vscode/
+.idea/
