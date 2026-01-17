@@ -35,8 +35,11 @@ def decode_image(hex_string):
     except:
         return None
 
+# Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)
+POLL_INTERVAL = 20 
+
 def process_images():
-    print("Cloud Vision Service Started...")
+    print(f"Cloud Vision Service Started (Interval: {POLL_INTERVAL}s)...")
     while True:
         try:
             # Find images with no result or 'Pending'
@@ -45,20 +48,16 @@ def process_images():
             if response.data:
                 record = response.data[0]
                 image_id = record['id']
-                print(f"Processing Image ID: {image_id}")
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Processing Image ID: {image_id}")
                 
-                # Retrieve Image Content
-                # NOTE: In production, use Storage Buckets. Here assuming bytea column.
-                img_hex = record['images'] # Supabase returns bytea as hex string
+                img_hex = record['images']
                 img_bytes = decode_image(img_hex)
                 
                 if img_bytes:
-                    # Save to temp file for Keras
                     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
                         tf.write(img_bytes)
                         tf_path = tf.name
                     
-                    # Predict
                     img = cv2.imread(tf_path)
                     img = cv2.resize(img, (224, 224))
                     img_array = img_to_array(img)
@@ -80,8 +79,8 @@ def process_images():
                     print("Failed to decode image.")
                     supabase.table("images").update({"result": "Error"}).eq("id", image_id).execute()
                     
-            else:
-                time.sleep(2)
+            # Use configurable interval
+            time.sleep(POLL_INTERVAL)
                 
         except Exception as e:
             print(f"Vision Brain Error: {e}")

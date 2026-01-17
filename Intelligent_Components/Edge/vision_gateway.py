@@ -10,22 +10,26 @@ from supabase import create_client, Client
 env_path = os.path.join(os.path.dirname(__file__), '../.env')
 config = dotenv_values(env_path)
 
-# Supabase Config (Like other scripts)
+# Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)
+AUTO_INTERVAL = 20 
+
+# Supabase Config
 url = config.get("SUPABASE_URL")
 key = config.get("SUPABASE_SERVICE_KEY") or config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
-# MQTT Config (Connect to VM Broker)
-MQTT_BROKER = config.get("MQTT_BROKER", "localhost")
+# MQTT Config
+MQTT_BROKER = config.get("MQTT_EDGE_BROKER", "34.59.186.75")
 MQTT_PORT = int(config.get("MQTT_PORT", "1883"))
 TOPIC_CAPTURE_CMD = "device/camera/command"
 
 class VisionGateway:
     def __init__(self):
-        print("Initializing Vision Gateway (MQTT Trigger)...")
+        print(f"Initializing Vision Gateway (Phase: {PHASE}, Interval: {AUTO_INTERVAL}s)...")
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+        self.running = True
 
     def on_connect(self, client, userdata, flags, rc):
         print(f"Connected to MQTT Broker (RC: {rc})")
@@ -35,14 +39,13 @@ class VisionGateway:
     def on_message(self, client, userdata, msg):
         try:
             payload = msg.payload.decode()
-            print(f"Received Command: {payload}")
             if "CAPTURE" in payload.upper():
                 self.capture_and_upload()
         except Exception as e:
             print(f"Error handling message: {e}")
 
     def capture_and_upload(self):
-        print("Capturing Image...")
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Capturing Image...")
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             print("Error: No Camera Found.")
@@ -52,11 +55,11 @@ class VisionGateway:
         cap.release()
 
         if ret:
-            cv2.imwrite("temp_snap.jpg", frame)
+            temp_file = "temp_snap.jpg"
+            cv2.imwrite(temp_file, frame)
             
-            # Upload to DB using Supabase Client
             try:
-                with open("temp_snap.jpg", 'rb') as f:
+                with open(temp_file, 'rb') as f:
                     binary_data = f.read()
                 
                 # Encode to base64 for JSON transport
@@ -68,24 +71,33 @@ class VisionGateway:
                     "result": None
                 }
                 supabase.table("images").insert(record).execute()
-                print("Image Uploaded to Database via Supabase Client.")
-                
-                # Optional: Acknowledge via MQTT
+                print("Image Uploaded to Supabase.")
                 self.client.publish("device/camera/status", "UPLOADED")
                 
             except Exception as e:
                 print(f"Upload Error: {e}")
             finally:
-                if os.path.exists("temp_snap.jpg"):
-                    os.remove("temp_snap.jpg")
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
         else:
             print("Failed to capture frame.")
 
+    def auto_capture_loop(self):
+        print("Automated Capture Loop Started.")
+        while self.running:
+            self.capture_and_upload()
+            time.sleep(AUTO_INTERVAL)
+
     def run(self):
+        # Start automation in a background thread
+        auto_thread = threading.Thread(target=self.auto_capture_loop, daemon=True)
+        auto_thread.start()
+
         try:
             self.client.connect(MQTT_BROKER, MQTT_PORT, 60)
             self.client.loop_forever()
         except KeyboardInterrupt:
+            self.running = False
             self.client.disconnect()
 
 if __name__ == "__main__":

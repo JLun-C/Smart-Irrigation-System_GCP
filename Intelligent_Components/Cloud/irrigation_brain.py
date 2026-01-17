@@ -129,7 +129,7 @@ class IrrigationBrain:
             print(f"📊 IRRIGATION DECISION @ {now_time}")
             print(f"{'='*60}")
             print(f"📍 Location: {config.get('CITY_NAME', 'Unknown')} (Lat: {config.get('LAT')}, Lon: {config.get('LON')})")
-            print(f"🌡️  Temperature: {temp}°C")
+            print(f"🌡️  Temperature: {round(temp, 1)}°C")
             print(f"💧 Humidity: {humidity}%")
             print(f"🌱 Soil Moisture: {soil_moisture}%")
             print(f"🌧️  Currently Raining: {'YES' if is_raining else 'NO'}")
@@ -143,7 +143,8 @@ class IrrigationBrain:
                 "humidity": int(humidity),
                 "soil_moisture": int(soil_moisture),
                 "is_raining": is_raining,
-                "pump_state": pump_cmd  # 0=OFF, 1=ON
+                "pump_state": pump_cmd,  # 0=OFF, 1=ON
+                "timestamp": datetime.now().isoformat()
             }
             supabase.table("sensor_data").insert(db_record).execute()
             print(f"Logged: T={temp}°C, H={humidity}%, SM={soil_moisture}%, Rain={is_raining}, Pump={pump_cmd}")
