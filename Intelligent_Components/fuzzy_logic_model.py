@@ -4,11 +4,10 @@ from skfuzzy import control as ctrl
 import requests
 import os
 import json
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from dotenv import load_dotenv
 import sys
 import serial
-from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from supabase import create_client, Client
 import argparse
@@ -18,10 +17,30 @@ import time
 
 class WeatherDecisionTester:
     def __init__(self):
-        load_dotenv()
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_KEY")
-        self.supabase: Client = create_client(supabase_url, supabase_key)
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        print(f"DEBUG: Loading .env from {env_path}")
+        
+        # Use dotenv_values to read directly from file, ignoring system env vars
+        from dotenv import dotenv_values
+        config = dotenv_values(env_path)
+        
+        supabase_url = config.get("SUPABASE_URL")
+        supabase_service_key = config.get("SUPABASE_SERVICE_KEY")
+        supabase_anon_key = config.get("SUPABASE_KEY")
+        
+        # Prioritize Service Key (Admin) -> Anon Key
+        if supabase_service_key:
+            print("DEBUG: Found SUPABASE_SERVICE_KEY. Running in ADMIN/SERVICE_ROLE mode (Bypassing RLS).")
+            self.supabase: Client = create_client(supabase_url, supabase_service_key)
+        elif supabase_anon_key:
+            print(f"DEBUG: Using Standard Key: {supabase_anon_key[:5]}...")
+            if supabase_anon_key.startswith("sb_secret"):
+                 print("\n⚠️  WARNING: It looks like you are using a Supabase Secret Token (starts with 'sb_secret') as the standard key.")
+                 print("   The Supabase Python client requires the 'anon' or 'service_role' API Key (JWT).")
+            self.supabase: Client = create_client(supabase_url, supabase_anon_key)
+        else:
+             print("ERROR: Supabase key (SUPABASE_SERVICE_KEY or SUPABASE_KEY) is missing in .env!")
+             self.supabase: Client = create_client(supabase_url, "")
 
         # Stateful Fallbacks
         self.last_valid_temp = None
@@ -109,7 +128,8 @@ class WeatherDecisionTester:
             print(f"Database Error: {e}")
 
     def get_forecast_rain_prob(self):
-        load_dotenv()
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        load_dotenv(env_path)
         api_key = os.getenv("OPENWEATHER_API_KEY")
         lat = os.getenv("LAT")
         lon = os.getenv("LON")
@@ -235,18 +255,18 @@ if __name__ == "__main__":
             arduino_data = None
             
             if args.simulate:
-                # Simulate delay between readings
-                time.sleep(5)
-                
                 # Generate random mock data
                 arduino_data = {
                     "Temperature": round(random.uniform(25.0, 35.0), 2),
-                    "Humidity": round(random.uniform(60.0, 90.0), 2),
-                    "Soil_moisture": int(random.uniform(30, 80)),
+                    "Humidity": round(random.uniform(40.0, 90.0), 2),
+                    "Soil_moisture": int(random.uniform(20, 100)),
                     "Raining": random.choice([0, 1]),
                     "Pump": "OFF" # Initial state, will be overwritten by decision
                 }
                 print(f"Set Simulated Input: {arduino_data}", flush=True)
+                
+                # Simulate delay between readings
+                time.sleep(60)
                 
             else:
                 # Real Hardware Logic
