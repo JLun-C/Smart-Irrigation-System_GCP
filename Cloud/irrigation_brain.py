@@ -38,7 +38,6 @@ class IrrigationBrain:
         self.client.on_message = self.on_message
 
     def setup_fuzzy_system(self):
-        # Same Logic as before
         self.soil_moisture = ctrl.Antecedent(np.arange(0, 101, 1), 'soil_moisture')
         self.temp = ctrl.Antecedent(np.arange(0, 51, 1), 'temperature')
         self.hum = ctrl.Antecedent(np.arange(0, 101, 1), 'humidity')
@@ -46,7 +45,6 @@ class IrrigationBrain:
         self.rain_prob = ctrl.Antecedent(np.arange(0, 101, 1), 'rain_probability')
         self.irrigation_volume = ctrl.Consequent(np.arange(0, 101, 1), 'irrigation_volume')
 
-        # Membership Functions (Simplified for brevity, same as original)
         self.soil_moisture['dry']   = fuzz.gaussmf(self.soil_moisture.universe, 20, 10)
         self.soil_moisture['moist'] = fuzz.gaussmf(self.soil_moisture.universe, 50, 10)
         self.soil_moisture['wet']   = fuzz.gaussmf(self.soil_moisture.universe, 80, 10)
@@ -68,13 +66,20 @@ class IrrigationBrain:
         self.irrigation_volume['low'] = fuzz.trapmf(self.irrigation_volume.universe, [13, 30, 50, 65])
         self.irrigation_volume['high'] = fuzz.trapmf(self.irrigation_volume.universe, [70, 85, 100, 100])
         
-        # Rules (Same as original)
         rules = [
             ctrl.Rule(self.soil_moisture['wet'] | self.is_raining['yes'], self.irrigation_volume['none']),
             ctrl.Rule(self.soil_moisture['moist'] & self.rain_prob['high'], self.irrigation_volume['none']),
-            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['hot'], self.irrigation_volume['high']),
-            ctrl.Rule(self.soil_moisture['dry'], self.irrigation_volume['low']) 
-            # (Truncated rule set for stability, usually you keep the full set)
+            ctrl.Rule(self.soil_moisture['moist'] & self.rain_prob['low'] & self.temp['hot'] & self.hum['wet'], self.irrigation_volume['none']),
+            ctrl.Rule(self.soil_moisture['moist'] & self.rain_prob['low'] & self.temp['hot'] & self.hum['moderate'], self.irrigation_volume['low']),
+            ctrl.Rule(self.soil_moisture['moist'] & self.rain_prob['low'] & self.temp['hot'] & self.hum['dry'], self.irrigation_volume['low']),
+            ctrl.Rule(self.soil_moisture['moist'] & self.rain_prob['low'] & self.temp['cool'], self.irrigation_volume['low']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['high'], self.irrigation_volume['low']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['hot'] & self.hum['wet'], self.irrigation_volume['low']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['hot'] & self.hum['moderate'], self.irrigation_volume['high']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['hot'] & self.hum['dry'], self.irrigation_volume['high']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['cool'] & self.hum['wet'], self.irrigation_volume['none']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['cool'] & self.hum['moderate'], self.irrigation_volume['low']),
+            ctrl.Rule(self.soil_moisture['dry'] & self.rain_prob['low'] & self.temp['cool'] & self.hum['dry'], self.irrigation_volume['low'])
         ]
         self.control_sys = ctrl.ControlSystem(rules)
         self.simulation = ctrl.ControlSystemSimulation(self.control_sys)
