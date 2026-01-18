@@ -69,7 +69,10 @@ class VisionGateway:
                     binary_data = f.read()
                 
                 # Encode to base64 for JSON transport
-                encoded_image = base64.b64encode(binary_data).decode('utf-8')
+                ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+                binary_data = buffer.tobytes()
+                encoded_image = base64.b64encode(binary_data).decode("utf-8")
+
                 
                 # Insert into Supabase
                 record = {

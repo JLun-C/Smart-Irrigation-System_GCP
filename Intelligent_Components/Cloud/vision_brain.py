@@ -34,26 +34,17 @@ CLASSES = ['Healthy', 'Powdery', 'Rust']
 import base64
 
 def decode_image(img_data):
-    try:
-        # Case 1: Already bytes
-        if isinstance(img_data, bytes):
-            return img_data
-        
-        # Case 2: Hex string from Postgres (\x...)
-        if isinstance(img_data, str) and img_data.startswith('\\x'):
-            return bytes.fromhex(img_data[2:])
-        
-        # Case 3: Base64 string (Common in web/IoT uploads)
-        if isinstance(img_data, str):
-            try:
-                return base64.b64decode(img_data)
-            except:
-                # If not base64, try raw hex
-                return bytes.fromhex(img_data)
-        
+    """
+    Decode BASE64 image string from Supabase into raw bytes
+    """
+    if not img_data:
         return None
+
+    try:
+        # Supabase stores base64 as TEXT
+        return base64.b64decode(img_data)
     except Exception as e:
-        print(f"Decoding error: {e}")
+        print(f"[Decode Error] Base64 decoding failed: {e}")
         return None
 
 # Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)
@@ -81,46 +72,33 @@ def process_images():
                 image_id = record['id']
                 print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Processing Image ID: {image_id}")
                 
-                img_hex = record['images']
-                img_bytes = decode_image(img_hex)
-                
-                if img_bytes:
-                    nparr = np.frombuffer(img_bytes, np.uint8)
-                    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    
-                    # CRITICAL: Verify img is NOT None before accessing attributes like .shape
-                    if img is not None:
-                        h, w = img.shape[:2]
-                        if h > 0 and w > 0:
-                            img = cv2.resize(img, (224, 224))
-                            img_array = img_to_array(img)
-                            img_array = np.expand_dims(img_array, axis=0) / 255.0
-                            
-                            predictions = model.predict(img_array)
-                            class_idx = np.argmax(predictions[0])
-                            confidence = float(np.max(predictions[0]) * 100)
-                            result = CLASSES[class_idx] if class_idx < len(CLASSES) else "Unknown"
-                            
-                            summary = f"{result} ({confidence:.2f}%)"
-                            print(f"Prediction Result: {summary}")
-                            
-                            # Update DB
-                            supabase.table("images").update({"result": result}).eq("id", image_id).execute()
-                            
-                            # Publish Result to Edge
-                            mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: {summary}")
-                        else:
-                            print(f"Error: Image ID {image_id} has zero dimensions ({w}x{h}).")
-                            supabase.table("images").update({"result": "Error: Empty Dimensions"}).eq("id", image_id).execute()
-                            mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (Zero Dim)")
-                    else:
-                        print(f"Error: OpenCV imdecode returned None for ID {image_id}")
-                        supabase.table("images").update({"result": "Error: Decode Fail"}).eq("id", image_id).execute()
-                        mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (OpenCV Decode)")
-                else:
-                    print(f"Failed to extract binary data for image {image_id}.")
-                    supabase.table("images").update({"result": "Error: Extraction Fail"}).eq("id", image_id).execute()
-                    mqtt_client.publish(TOPIC_RESULT, f"ID {image_id}: ERROR (Binary Fail)")
+                img_bytes = decode_image(record['images'])
+
+                if not img_bytes:
+                    raise ValueError("Decoded image bytes are None")
+
+                if len(img_bytes) > 5 * 1024 * 1024:
+                    raise ValueError("Image too large (>5MB)")
+
+                nparr = np.frombuffer(img_bytes, np.uint8)
+                if nparr.size == 0:
+                    raise ValueError("Empty image buffer")
+
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img is None:
+                    raise ValueError("cv2.imdecode returned None")
+
+                img = cv2.resize(img, (224, 224))
+                img_array = img_to_array(img)
+                img_array = np.expand_dims(img_array, axis=0) / 255.0
+
+                predictions = model.predict(img_array)
+                class_idx = np.argmax(predictions[0])
+                confidence = float(np.max(predictions[0]) * 100)
+                result = CLASSES[class_idx] if class_idx < len(CLASSES) else "Unknown"
+
+                summary = f"{result} ({confidence:.2f}%)"
+                print(f"Prediction Result: {summary}")
             
             time.sleep(POLL_INTERVAL)
                 
