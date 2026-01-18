@@ -102,6 +102,39 @@ Run the services that act as the intelligence center.
 python3 Cloud/irrigation_brain.py
 
 ### B. Access to The Dashboard
+Run the following command to enable the dashboard from Grafana:
+```bash
+# 1. Update your local package index
+sudo apt-get update
+
+# 2. Install required dependencies
+sudo apt-get install -y apt-transport-https software-properties-common wget
+
+# 3. Create the keyrings directory if it doesn't exist
+sudo mkdir -p /etc/apt/keyrings/
+
+# 4. Download and add the Grafana GPG key
+wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+
+# 5. Add the Grafana repository (Corrected path: /etc/apt/sources.list.d/)
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
+
+# 6. Update the package list again to see the new Grafana repository
+sudo apt-get update
+
+# 7. Install Grafana
+sudo apt-get install -y grafana
+
+# 8. Reload systemd to recognize the new service
+sudo systemctl daemon-reload
+
+# 9. Start the Grafana server
+sudo systemctl start grafana-server
+
+# 10. Enable Grafana to start automatically on boot
+sudo systemctl enable grafana-server
+```
+After the installation is complete, access the dashboard at:
 http://[YOUR_VM_EXTERNAL_IP]:[YOUR_VM_PORT]
 
 ### C. On Your Laptop (Vision Edge)
