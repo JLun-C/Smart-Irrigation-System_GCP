@@ -196,10 +196,19 @@ void setup() {
   // Setup Network
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
+
+  // Attempt MQTT connection once at startup
+  unsigned long startAttempt = millis();
+  while (!client.connected() && millis() - startAttempt < 5000) {
+    reconnect();
+    client.loop();
+    delay(100); // small yield, safe
+  }
+  
   // Immediate first telemetry after boot
   sendTelemetry();
   lastMsg = millis();
-  client.setCallback(callback);
 }
 
 // =====================================================
