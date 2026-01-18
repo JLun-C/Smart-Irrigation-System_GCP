@@ -42,7 +42,7 @@ sudo systemctl status mosquitto
 ```
 
 ## 3. Clone Repository
-Clone your project (you may need to set up a Personal Access Token if it's private, or just use HTTPS if public):
+Clone this project into your VM:
 ```bash
 git clone https://github.com/JLun-C/Smart-Irrigation-System_GCP.git
 cd Smart-Irrigation-System_GCP
@@ -107,7 +107,7 @@ http://[YOUR_VM_EXTERNAL_IP]:[YOUR_VM_PORT]
 ### C. On Your Laptop (Vision Edge)
 Since the ESP32 now connects directly to WiFi (MQTT), you only need your laptop for the Webcam.
 
-**Configuration:** On your laptop, edit `assets/.env` and set:
+**Configuration:** On your PC, edit `assets/.env` and set:
 ```env
 MQTT_BROKER=<YOUR_VM_EXTERNAL_IP>
 MQTT_PORT=1883
