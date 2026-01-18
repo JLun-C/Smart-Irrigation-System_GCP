@@ -22,8 +22,8 @@ key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # 2. MQTT Setup (Use Private Broker on VM)
-MQTT_BROKER = config.get("MQTT_BROKER", "localhost")
-MQTT_PORT = int(config.get("MQTT_PORT", "1883"))
+MQTT_BROKER = config.get("MQTT_BROKER")
+MQTT_PORT = int(config.get("MQTT_PORT"))
 TOPIC_TELEMETRY = "device/+/telemetry" # + wildcard for any device ID
 TOPIC_COMMAND_PREFIX = "device/"
 

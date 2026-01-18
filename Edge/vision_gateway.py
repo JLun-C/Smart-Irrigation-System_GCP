@@ -20,8 +20,8 @@ key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # MQTT Config
-MQTT_BROKER = config.get("MQTT_EDGE_BROKER", "34.59.186.75")
-MQTT_PORT = int(config.get("MQTT_PORT", "1883"))
+MQTT_BROKER = config.get("MQTT_EDGE_BROKER")
+MQTT_PORT = int(config.get("MQTT_PORT"))
 TOPIC_CAPTURE_CMD = "device/camera/command"
 TOPIC_RESULT = "device/camera/result"
 

@@ -22,12 +22,12 @@ key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # MQTT Config (Connect to VM Broker)
-MQTT_BROKER = config.get("MQTT_EDGE_BROKER", "34.59.186.75")
-MQTT_PORT = int(config.get("MQTT_PORT", "1883"))
+MQTT_BROKER = config.get("MQTT_EDGE_BROKER")
+MQTT_PORT = int(config.get("MQTT_PORT"))
 TOPIC_RESULT = "device/camera/result"
 
 # Load Model
-MODEL_PATH = os.path.join(os.path.dirname(__file__), '../leaf_disease_detection_model.keras')
+MODEL_PATH = os.path.join(os.path.dirname(__file__), '../assets/leaf_disease_detection_model.keras')
 model = load_model(MODEL_PATH)
 CLASSES = ['Healthy', 'Powdery', 'Rust']
 
