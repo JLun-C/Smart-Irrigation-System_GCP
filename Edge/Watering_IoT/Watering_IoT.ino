@@ -49,7 +49,7 @@ PubSubClient client(espClient);
 // GLOBAL VARIABLES
 // =====================================================
 unsigned long lastMsg = 0;
-const unsigned long TELEMETRY_CYCLE = 20000; // 20 seconds (DEV), change to 3600000 for 1 hour (PRODUCTION)
+const unsigned long TELEMETRY_CYCLE = 3600000; // 20 seconds (DEV), change to 3600000 for 1 hour (PRODUCTION)
 bool pumpState = false;
 
 // Calibration for Soil Moisture

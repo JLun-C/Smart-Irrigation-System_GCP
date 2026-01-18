@@ -11,8 +11,8 @@ from supabase import create_client, Client
 env_path = os.path.join(os.path.dirname(__file__), '../assets/.env')
 config = dotenv_values(env_path)
 
-# Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)
-AUTO_INTERVAL = 20 
+# Automation Interval (21600 for 6h deployment)
+AUTO_INTERVAL = 21600
 
 # Supabase Config
 url = config.get("SUPABASE_URL")

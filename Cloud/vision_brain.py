@@ -51,8 +51,8 @@ def decode_image(img_data):
         print(f"[Decode Error] Base64 decoding failed: {e}")
         return None
 
-# Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)
-POLL_INTERVAL = 20 
+# Automation Interval (21600 for 6h deployment)
+POLL_INTERVAL = 21600
 
 def process_images():
     # Setup MQTT Client
