@@ -16,7 +16,7 @@ AUTO_INTERVAL = 20
 
 # Supabase Config
 url = config.get("SUPABASE_URL")
-key = config.get("SUPABASE_SERVICE_KEY") or config.get("SUPABASE_KEY")
+key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # MQTT Config

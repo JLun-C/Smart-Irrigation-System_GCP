@@ -18,7 +18,7 @@ config = dotenv_values(env_path)
 
 # 1. Supabase Setup (For History Logs & Dashboard)
 url = config.get("SUPABASE_URL")
-key = config.get("SUPABASE_SERVICE_KEY") or config.get("SUPABASE_KEY")
+key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # 2. MQTT Setup (Use Private Broker on VM)

@@ -18,7 +18,7 @@ env_path = os.path.join(os.path.dirname(__file__), '../assets/.env')
 config = dotenv_values(env_path)
 
 url = config.get("SUPABASE_URL")
-key = config.get("SUPABASE_SERVICE_KEY") or config.get("SUPABASE_KEY")
+key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # MQTT Config (Connect to VM Broker)
