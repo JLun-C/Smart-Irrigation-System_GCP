@@ -8,10 +8,9 @@ __pycache__/
 # Python
 *.py[cod]
 *$py.class
-assets/snapshot.jpg
 
-# System Design Document
-System_Design_Document.md
+# Images
+*.jpg
 
 # OS
 .DS_Store

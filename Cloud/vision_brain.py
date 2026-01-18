@@ -22,7 +22,7 @@ key = config.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # MQTT Config (Connect to VM Broker)
-MQTT_BROKER = config.get("MQTT_EDGE_BROKER")
+MQTT_BROKER = config.get("MQTT_BROKER")
 MQTT_PORT = int(config.get("MQTT_PORT"))
 TOPIC_RESULT = "device/camera/result"
 

@@ -12,12 +12,12 @@ This guide covers how to set up your Google Cloud Platform (GCP) Compute Engine 
     *   **OS/Image**: Ubuntu 22.04 LTS (x86/64).
     *   **Machine Type**: e2-medium (2 vCPU, 4GB RAM) or larger is recommended for ML tasks.
     *   **Firewall**: Check both **Allow HTTP traffic** and **Allow HTTPS traffic**.
-2.  **Open Streamlit Port (8501)**:
+2.  **Set a firewall rule to enable MQTT connection**:
     *   Go to **VPC Network** > **Firewall**.
-    *   Create a rule named `allow-streamlit`.
+    *   Create a rule named `allow-mqtt`.
     *   Targets: `All instances in the network`.
-    *   Source IPv4 limits: `0.0.0.0/0`.
-    *   Protocols and ports: `tcp:8501`.
+    *   Source IPv4 limits: `[YOUR_VM_EXTERNAL_IP]`.
+    *   Protocols and ports: `tcp:1883`.
 3.  **SSH into VM**: Click the "SSH" button in the VM instances list.
 
 ## 2. System Dependencies
@@ -41,24 +41,14 @@ sudo systemctl start mosquitto
 sudo systemctl status mosquitto
 ```
 
-**Configure Firewall for MQTT:**
-```bash
-# Allow MQTT port (1883)
-sudo ufw allow 1883/tcp
-
-# If UFW is not enabled, enable it (be careful with SSH!)
-sudo ufw allow ssh
-sudo ufw enable
-```
-
-## 4. Clone Repository
+## 3. Clone Repository
 Clone your project (you may need to set up a Personal Access Token if it's private, or just use HTTPS if public):
 ```bash
 git clone https://github.com/JLun-C/Smart-Irrigation-System_GCP.git
 cd Smart-Irrigation-System_GCP
 ```
 
-## 5. Python Environment Setup
+## 4. Python Environment Setup
 Create a virtual environment to keep dependencies isolated:
 ```bash
 # Create venv
@@ -84,9 +74,9 @@ CITY_NAME=[YOUR_CITY_NAME]
 LAT=[YOUR_PLANT_CURRENT_LATITUDE]
 LON=[YOUR_PLANT_CURRENT_LONGITUDE]
 
-SUPABASE_URL=[YOUR_SUPABASE_URL]
-SUPABASE_KEY=[YOUR_SUPABASE_ANON_KEY]
-SUPABASE_SERVICE_KEY=[YOUR_SUPABASE_SERVICE_ROLE_KEY]
+# Our Supabase URL and anon key for limited public access
+SUPABASE_URL=https://eeiazmvadvbflsuulcpz.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlaWF6bXZhZHZiZmxzdXVsY3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5NzY4MzksImV4cCI6MjA4MjU1MjgzOX0.yb4fd2jnawkGBxZH_m_aCo3xzp6vqMCCSiUXe3Sqo1M
 
 # MQTT Broker (use 'localhost' on VM, VM external IP on laptop)
 MQTT_BROKER=localhost
@@ -96,9 +86,11 @@ MQTT_PORT=1883
 
 ## 7. Running the Application (MQTT Cloud Architecture)
 
-**Important: Before running, configure your ESP32 firmware**
+**Important: Before running, configure your ESP32 firmware AND make sure you are in a virtual environment (venv)**
 Edit `Edge/Watering_IoT.ino` and replace:
 ```cpp
+const char* ssid = "YOUR_WIFI_SSID"; // Your WIFI SSID
+const char* password = "YOUR_WIFI_PASSWORD"; // Your WIFI PW
 const char* mqtt_server = "YOUR_VM_EXTERNAL_IP"; // Replace with your actual VM IP
 ```
 Then upload the firmware to your ESP32.
@@ -109,14 +101,8 @@ Run the services that act as the intelligence center.
 # Terminal 1: Irrigation Brain (Listens to MQTT, makes decisions)
 python3 Cloud/irrigation_brain.py
 
-# Terminal 2: Vision Brain (Analyses uploaded images)
-python3 Cloud/vision_brain.py
-```
-
-### B. On the Cloud VM (The Dashboard)
-```bash
-streamlit run assets/dashboard.py
-```
+### B. Access to The Dashboard
+http://[YOUR_VM_EXTERNAL_IP]:[YOUR_VM_PORT]
 
 ### C. On Your Laptop (Vision Edge)
 Since the ESP32 now connects directly to WiFi (MQTT), you only need your laptop for the Webcam.
