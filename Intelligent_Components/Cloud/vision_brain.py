@@ -122,6 +122,8 @@ def process_images():
                 confidence = float(np.max(predictions[0]) * 100)
                 result = CLASSES[class_idx] if class_idx < len(CLASSES) else "Unknown"
 
+                summary = f"{result} ({confidence:.2f}%)"
+
                 supabase.table("images") \
                     .update({"result": result, "status": "DONE"}) \
                     .eq("id", image_id) \
@@ -132,7 +134,6 @@ def process_images():
                     f"ID {image_id}: {summary}"
                 )
 
-                summary = f"{result} ({confidence:.2f}%)"
                 print(f"Prediction Result: {summary}")
             
             time.sleep(POLL_INTERVAL)
