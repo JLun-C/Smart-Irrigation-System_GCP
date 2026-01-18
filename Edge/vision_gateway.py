@@ -8,7 +8,7 @@ from dotenv import dotenv_values
 from supabase import create_client, Client
 
 # Load environment variables
-env_path = os.path.join(os.path.dirname(__file__), '../.env')
+env_path = os.path.join(os.path.dirname(__file__), '../assets/.env')
 config = dotenv_values(env_path)
 
 # Automation Interval (Manually change this: 20 for development, 21600 for 6h deployment)

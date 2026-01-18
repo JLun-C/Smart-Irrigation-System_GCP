@@ -14,7 +14,7 @@ import base64
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppresses info/warning logs
 
 # Load environment variables
-env_path = os.path.join(os.path.dirname(__file__), '../.env')
+env_path = os.path.join(os.path.dirname(__file__), '../assets/.env')
 config = dotenv_values(env_path)
 
 url = config.get("SUPABASE_URL")

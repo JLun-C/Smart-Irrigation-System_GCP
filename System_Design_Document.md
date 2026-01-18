@@ -30,7 +30,7 @@ graph LR
     -   Communicates with the Intelligent Component via Serial (or direct integration in simulation).
 
 2.  **Intelligent Component (Fuzzy Logic Model)**:
-    -   **File**: `Intelligent_Components/fuzzy_logic_model.py`
+    -   **File**: `Cloud/irrigation_brain.py`
     -   **Role**: Acts as an Edge Gateway. It aggregates local sensor data and fetches forecasted rain probability from OpenWeatherMap.
     -   **Decision Engine**: Uses the `scikit-fuzzy` library to compute an "Irrigation Volume" score (0-100) based on inputs.
     -   **Output**: Controls the pump (OFF/LOW/HIGH) and pushes telemetry to the Cloud Database.
@@ -41,7 +41,7 @@ graph LR
     -   **Why Supabase?**: Provides a scalable PostgreSQL database with real-time capabilities and simple REST/Client API, suitable for rapid prototyping (PoC).
 
 4.  **Dashboard (Streamlit)**:
-    -   **File**: `Intelligent_Components/dashboard.py`
+    -   **File**: `assets/dashboard.py`
     -   **Role**: Visualizes real-time status and historical trends.
     -   **Features**: Displays metrics, charts for soil moisture/temperature, and latest weather forecast.
 
@@ -56,7 +56,7 @@ graph LR
 -   **Supabase vs. GCP (Project Requirement)**:
     -   *Choice*: Supabase (for this Proof of Concept).
     -   *Reason*: Faster setup time and lower latency for retrieving real-time updates in a PoC environment.
-    -   *Note*: The architecture is modular. The database client in `fuzzy_logic_model.py` and `dashboard.py` can be swapped for GCP Firestore without changing the core business logic.
+    -   *Note*: The architecture is modular. The database client in `irrigation_brain.py` and `dashboard.py` can be swapped for GCP Firestore without changing the core business logic.
 
 -   **Local vs. Cloud Intelligence**:
     -   *Choice*: Edge/Local Intelligence (Fuzzy Logic runs on the Gateway).
@@ -72,7 +72,7 @@ graph LR
 ### Setup
 1.  **Install Dependencies**:
     ```bash
-    pip install -r Intelligent_Components/requirements.txt
+    pip install -r requirements.txt
     ```
 2.  **Configure Environment**:
     -   Create `.env` file with `SUPABASE_URL`, `SUPABASE_KEY`, `OPENWEATHER_API_KEY`, `LAT`, `LON`.
@@ -80,13 +80,13 @@ graph LR
 ### Running the Application
 1.  **Start the Logic/Simulator**:
     ```bash
-    python Intelligent_Components/fuzzy_logic_model.py --simulate
+    python Cloud/irrigation_brain.py --simulate
     ```
     -   This script will simulate sensor readings, calculate irrigation needs, and push data to the cloud.
 
 2.  **Start the Dashboard**:
     ```bash
-    streamlit run Intelligent_Components/dashboard.py
+    streamlit run assets/dashboard.py
     ```
     -   Open the provided local URL (e.g., `http://localhost:8501`) to view the system.
 

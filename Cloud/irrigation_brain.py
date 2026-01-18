@@ -13,7 +13,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # Load environment variables
-env_path = os.path.join(os.path.dirname(__file__), '../.env')
+env_path = os.path.join(os.path.dirname(__file__), '../assets/.env')
 config = dotenv_values(env_path)
 
 # 1. Supabase Setup (For History Logs & Dashboard)

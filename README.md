@@ -75,7 +75,7 @@ pip install -r requirements.txt
 ## 6. Configuration (.env)
 You must manually create the `.env` file on the server because it is (correctly) ignored by git.
 ```bash
-nano Intelligent_Components/.env
+nano assets/.env
 ```
 Paste your configuration (replace with your actual values):
 ```env
@@ -97,7 +97,7 @@ MQTT_PORT=1883
 ## 7. Running the Application (MQTT Cloud Architecture)
 
 **Important: Before running, configure your ESP32 firmware**
-Edit `Watering_IoT/Watering_IoT.ino` and replace:
+Edit `Edge/Watering_IoT.ino` and replace:
 ```cpp
 const char* mqtt_server = "YOUR_VM_EXTERNAL_IP"; // Replace with your actual VM IP
 ```
@@ -107,21 +107,21 @@ Then upload the firmware to your ESP32.
 Run the services that act as the intelligence center.
 ```bash
 # Terminal 1: Irrigation Brain (Listens to MQTT, makes decisions)
-python3 Intelligent_Components/Cloud/irrigation_brain.py
+python3 Cloud/irrigation_brain.py
 
 # Terminal 2: Vision Brain (Analyses uploaded images)
-python3 Intelligent_Components/Cloud/vision_brain.py
+python3 Cloud/vision_brain.py
 ```
 
 ### B. On the Cloud VM (The Dashboard)
 ```bash
-streamlit run Intelligent_Components/dashboard.py
+streamlit run assets/dashboard.py
 ```
 
 ### C. On Your Laptop (Vision Edge)
 Since the ESP32 now connects directly to WiFi (MQTT), you only need your laptop for the Webcam.
 
-**Configuration:** On your laptop, edit `Intelligent_Components/.env` and set:
+**Configuration:** On your laptop, edit `assets/.env` and set:
 ```env
 MQTT_BROKER=<YOUR_VM_EXTERNAL_IP>
 MQTT_PORT=1883
@@ -130,7 +130,7 @@ MQTT_PORT=1883
 Then run:
 ```bash
 # Terminal 1: Vision Gateway (Listens for 'CAPTURE' MQTT command)
-python Intelligent_Components/Edge/vision_gateway.py
+python Edge/vision_gateway.py
 ```
 
 ### D. The ESP32 (Irrigation Edge)

@@ -8,7 +8,7 @@ __pycache__/
 # Python
 *.py[cod]
 *$py.class
-Intelligent_Components/snapshot.jpg
+assets/snapshot.jpg
 
 # System Design Document
 System_Design_Document.md
