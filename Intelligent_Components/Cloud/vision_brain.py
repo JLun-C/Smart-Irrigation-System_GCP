@@ -42,6 +42,10 @@ def decode_image(img_data):
 
     try:
         # Supabase stores base64 as TEXT
+        missing_padding = len(img_data) % 4
+        if missing_padding:
+            img_data += "=" * (4 - missing_padding)
+
         return base64.b64decode(img_data)
     except Exception as e:
         print(f"[Decode Error] Base64 decoding failed: {e}")
@@ -64,29 +68,50 @@ def process_images():
 
     while True:
         try:
-            # Find oldest image with no result
-            response = supabase.table("images").select("*").is_("result", "null").order("created_at", desc=False).limit(1).execute()
+            # Find newest image
+            response = supabase.table("images").select("*").eq("status", "PENDING").order("created_at", desc=True).limit(1).execute()
             
             if response.data:
                 record = response.data[0]
                 image_id = record['id']
                 print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Processing Image ID: {image_id}")
+
+                supabase.table("images") \
+                .update({"status": "PROCESSING"}) \
+                .eq("id", image_id) \
+                .execute()
                 
                 img_bytes = decode_image(record['images'])
 
                 if not img_bytes:
-                    raise ValueError("Decoded image bytes are None")
+                    supabase.table("images") \
+                        .update({"result": "ERROR: Invalid Base64", "status": "ERROR"}) \
+                        .eq("id", image_id) \
+                        .execute()
+                    continue
 
                 if len(img_bytes) > 5 * 1024 * 1024:
-                    raise ValueError("Image too large (>5MB)")
+                    supabase.table("images") \
+                        .update({"result": "ERROR: Image too large (>5MB)", "status": "ERROR"}) \
+                        .eq("id", image_id) \
+                        .execute()
+                    continue
 
                 nparr = np.frombuffer(img_bytes, np.uint8)
                 if nparr.size == 0:
-                    raise ValueError("Empty image buffer")
+                    supabase.table("images") \
+                        .update({"result": "ERROR: Empty Image Buffer", "status": "ERROR"}) \
+                        .eq("id", image_id) \
+                        .execute()
+                    continue
 
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 if img is None:
-                    raise ValueError("cv2.imdecode returned None")
+                    supabase.table("images") \
+                        .update({"result": "ERROR: Decode Fail", "status": "ERROR"}) \
+                        .eq("id", image_id) \
+                        .execute()
+                    continue
 
                 img = cv2.resize(img, (224, 224))
                 img_array = img_to_array(img)
@@ -96,6 +121,16 @@ def process_images():
                 class_idx = np.argmax(predictions[0])
                 confidence = float(np.max(predictions[0]) * 100)
                 result = CLASSES[class_idx] if class_idx < len(CLASSES) else "Unknown"
+
+                supabase.table("images") \
+                    .update({"result": result, "status": "DONE"}) \
+                    .eq("id", image_id) \
+                    .execute()
+
+                mqtt_client.publish(
+                    TOPIC_RESULT,
+                    f"ID {image_id}: {summary}"
+                )
 
                 summary = f"{result} ({confidence:.2f}%)"
                 print(f"Prediction Result: {summary}")
