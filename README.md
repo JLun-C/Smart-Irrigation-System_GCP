@@ -54,7 +54,7 @@ sudo ufw enable
 ## 4. Clone Repository
 Clone your project (you may need to set up a Personal Access Token if it's private, or just use HTTPS if public):
 ```bash
-git clone <YOUR_REPO_URL>
+git clone https://github.com/JLun-C/Smart-Irrigation-System_GCP.git
 cd Smart-Irrigation-System_GCP
 ```
 

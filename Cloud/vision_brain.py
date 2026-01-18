@@ -55,16 +55,17 @@ def decode_image(img_data):
 POLL_INTERVAL = 20 
 
 def process_images():
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Cloud Vision Service v2 (Auto-Automation) Started.")
-    print(f"Interval: {POLL_INTERVAL}s, Broker: {MQTT_BROKER}")
-    
     # Setup MQTT Client
     mqtt_client = mqtt.Client()
     try:
         mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
         mqtt_client.loop_start()
+        print(f"MQTT Broker connected: {MQTT_BROKER}:{MQTT_PORT}")
     except Exception as e:
         print(f"MQTT Connection Error: {e}")
+
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Cloud Vision Service v2 (Auto-Automation) Started.")
+    print(f"Interval: {POLL_INTERVAL}s")
 
     while True:
         try:
@@ -143,4 +144,5 @@ def process_images():
             time.sleep(5)
 
 if __name__ == "__main__":
+    print("Initiating Cloud Vision Disease Detection...")
     process_images()
