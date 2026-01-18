@@ -199,9 +199,6 @@ class IrrigationBrain:
         except KeyboardInterrupt:
             print("Stopping...")
             self.client.disconnect()
-        finally:
-            self.client.disconnect()
-            print("Disconnected from MQTT Broker")
 
 if __name__ == "__main__":
     brain = IrrigationBrain()
