@@ -49,12 +49,52 @@ PubSubClient client(espClient);
 // GLOBAL VARIABLES
 // =====================================================
 unsigned long lastMsg = 0;
-const unsigned long TELEMETRY_CYCLE = 3600000; // 20 seconds (DEV), change to 3600000 for 1 hour (PRODUCTION)
+const unsigned long TELEMETRY_CYCLE = 3600000; // 3600000 for 1 hour (PRODUCTION)
 bool pumpState = false;
 
 // Calibration for Soil Moisture
 int MinDepth = 4095;   // Fully dry
 int MaxDepth = 2170;   // Fully wet
+
+void sendTelemetry() {
+  // Read Sensors
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+  if (isnan(t) || isnan(h)) { t = 0; h = 0;}
+  
+  int rawMoisture = analogRead(MOISTURE_PIN);
+  int soilPercent = map(rawMoisture, MinDepth, MaxDepth, 0, 100);
+  soilPercent = constrain(soilPercent, 0, 100);
+  
+  bool raining = digitalRead(RAIN_PIN) == LOW; // Low = Rain
+  
+  // Debug: Print all readings to Serial
+  Serial.println("----------------------------");
+  Serial.print("Temperature: "); Serial.print(t); Serial.println(" °C");
+  Serial.print("Humidity: "); Serial.print(h); Serial.println(" %");
+  Serial.print("Soil Moisture: "); Serial.print(soilPercent); Serial.println(" %");
+  Serial.print("Rain Status: "); Serial.println(raining ? "YES" : "NO");
+  Serial.print("Pump Status: "); Serial.println(pumpState ? "ON" : "OFF");
+  
+  // JSON Construction
+  JSONVar payload;
+  payload["Temperature"]   = t;
+  payload["Humidity"]      = h;
+  payload["Soil_moisture"] = soilPercent;
+  payload["Raining"]       = raining ? 1 : 0;
+  payload["Pump"]          = pumpState ? "ON" : "OFF"; 
+  
+  // String for Gateway compatibility
+  String jsonString = JSON.stringify(payload);
+  
+  // A. Send to Serial (For Laptop Gateway)
+  Serial.println(jsonString);
+  
+  // B. Send to MQTT (Direct Cloud)
+  if(client.connected()){
+    client.publish(topic_telemetry, jsonString.c_str());
+  }
+}
 
 // =====================================================
 // SETUP WIFI
@@ -156,6 +196,9 @@ void setup() {
   // Setup Network
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
+  // Immediate first telemetry after boot
+  sendTelemetry();
+  lastMsg = millis();
   client.setCallback(callback);
 }
 
@@ -199,41 +242,6 @@ void loop() {
   if (now - lastMsg > TELEMETRY_CYCLE) {
     lastMsg = now;
 
-    // Read Sensors
-    float t = dht.readTemperature();
-    float h = dht.readHumidity();
-    if (isnan(t) || isnan(h)) { t = 0; h = 0;}
-    
-    int rawMoisture = analogRead(MOISTURE_PIN);
-    int soilPercent = map(rawMoisture, MinDepth, MaxDepth, 0, 100);
-    soilPercent = constrain(soilPercent, 0, 100);
-    
-    bool raining = digitalRead(RAIN_PIN) == LOW; // Low = Rain
-
-    // Debug: Print all readings to Serial
-    Serial.println("----------------------------");
-    Serial.print("Temperature: "); Serial.print(t); Serial.println(" °C");
-    Serial.print("Humidity: "); Serial.print(h); Serial.println(" %");
-    Serial.print("Soil Moisture: "); Serial.print(soilPercent); Serial.println(" %");
-    Serial.print("Rain Status: "); Serial.println(raining ? "YES" : "NO");
-    Serial.print("Pump Status: "); Serial.println(pumpState ? "ON" : "OFF");
-
-    // JSON Construction
-    JSONVar payload;
-    payload["Temperature"]   = t;
-    payload["Humidity"]      = h;
-    payload["Soil_moisture"] = soilPercent;
-    payload["Raining"]       = raining ? 1 : 0;
-    payload["Pump"]          = pumpState ? "ON" : "OFF"; // String for Gateway compatibility
-
-    String jsonString = JSON.stringify(payload);
-    
-    // A. Send to Serial (For Laptop Gateway)
-    Serial.println(jsonString);
-
-    // B. Send to MQTT (Direct Cloud)
-    if(client.connected()){
-      client.publish(topic_telemetry, jsonString.c_str());
-    }
+    sendTelemetry();
   }
 }
