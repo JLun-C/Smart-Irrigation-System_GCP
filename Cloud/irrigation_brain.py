@@ -149,10 +149,10 @@ class IrrigationBrain:
             supabase.table("sensor_data").insert(db_record).execute()
             print(f"Logged: T={temp}°C, H={humidity}%, SM={soil_moisture}%, Rain={is_raining}, Pump={pump_cmd}")
             
-            # 3. Publish Command back to Device
+            # 3. Publish Command back to Device (RETAINED)
             cmd_topic = f"{TOPIC_COMMAND_PREFIX}{device_id}/command"
-            self.client.publish(cmd_topic, str(pump_cmd))
-            print(f"Published Command {pump_cmd} to {cmd_topic}")
+            self.client.publish(cmd_topic, str(pump_cmd), retain=True)
+            print(f"Published Command {pump_cmd} to {cmd_topic} (retained)")
             
         except Exception as e:
             print(f"Error processing message: {e}")
